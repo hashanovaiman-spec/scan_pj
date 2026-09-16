@@ -526,7 +526,11 @@ h2 { font-size: clamp(31px, 3vw, 45px); line-height: 1.08; margin-bottom: 40px; 
   .search-content { grid-template-columns: 1fr; gap: 0; margin-top: 28px; }
   .search-form { grid-template-columns: 1fr; min-height: auto; gap: 28px; padding: 25px 18px; }
   .search-main-fields > label input, .search-main-fields > label select { max-width: none; }
-  .checkbox-list { display: none; }
+  .checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
   .search-submit-area { margin-top: 6px; }
   .search-submit-area .primary-button { width: 100%; max-width: none; }
   .search-illustration { display: none; }

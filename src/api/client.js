@@ -1,4 +1,9 @@
 import axios from 'axios';
+import {
+  clearAuthToken,
+  getStoredAuth,
+  isTokenValid,
+} from '../utils/token';
 
 const api = axios.create({
   baseURL: 'https://gateway.scan-interfax.ru/api/v1',
@@ -9,22 +14,38 @@ const api = axios.create({
   timeout: 60000,
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  const expire = localStorage.getItem('expire');
-  const tokenIsActual =
-    token &&
-    expire &&
-    new Date(expire).getTime() > Date.now();
+let unauthorizedHandler = null;
 
-  if (tokenIsActual) {
-    config.headers.Authorization = `Bearer ${token}`;
-  } else if (token || expire) {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('expire');
+export const setUnauthorizedHandler = (handler) => {
+  unauthorizedHandler = typeof handler === 'function' ? handler : null;
+};
+
+const resetAuthorization = () => {
+  clearAuthToken();
+  unauthorizedHandler?.();
+};
+
+api.interceptors.request.use((config) => {
+  const auth = getStoredAuth();
+
+  if (isTokenValid(auth)) {
+    config.headers.Authorization = `Bearer ${auth.accessToken}`;
+  } else if (auth.accessToken || auth.expire) {
+    resetAuthorization();
   }
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      resetAuthorization();
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export default api;

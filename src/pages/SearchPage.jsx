@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { runSearch } from '../store/searchSlice';
 import { validateInn } from '../utils/inn';
 import { buildSearchPayload } from '../utils/searchPayload';
+import { loadLastSearch, saveLastSearch } from '../utils/searchStorage';
 
 import searchImage from '../assets/search-illustration.svg';
 import folderImage from '../assets/folder.svg';
@@ -25,11 +26,16 @@ const initialForm = {
   includeDigests: false,
 };
 
+const getInitialForm = () => ({
+  ...initialForm,
+  ...(loadLastSearch()?.form || {}),
+});
+
 export const SearchPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(getInitialForm);
   const [touched, setTouched] = useState({});
 
   const errors = useMemo(() => {
@@ -51,7 +57,6 @@ export const SearchPage = () => {
     }
 
     const limit = Number(form.limit);
-
     if (
       form.limit &&
       (!Number.isInteger(limit) || limit < 1 || limit > 1000)
@@ -106,6 +111,7 @@ export const SearchPage = () => {
 
     const payload = buildSearchPayload(form);
 
+    saveLastSearch({ form, payload });
     dispatch(runSearch(payload));
     navigate('/results');
   };
@@ -319,7 +325,6 @@ export const SearchPage = () => {
                       )
                     }
                   />
-
                   <span>{label}</span>
                 </label>
               ))}

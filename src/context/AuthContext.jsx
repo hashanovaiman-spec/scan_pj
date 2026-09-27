@@ -1,70 +1,99 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { useDispatch } from 'react-redux';
+
+import { setUnauthorizedHandler } from '../api/client';
 import { getAccountInfo, loginRequest } from '../api/scanApi';
+import { clearSearch } from '../store/searchSlice';
+import { clearLastSearch } from '../utils/searchStorage';
+import {
+  clearAuthToken,
+  getTokenExpiration,
+  isTokenValid,
+  saveAuthToken,
+} from '../utils/token';
 
 const AuthContext = createContext(null);
 
-const tokenIsValid = () => {
-  const token = localStorage.getItem('accessToken');
-  const expire = localStorage.getItem('expire');
-  if (!token || !expire) return false;
-  return new Date(expire).getTime() > Date.now();
+const getInitialAuthState = () => {
+  if (isTokenValid()) return true;
+
+  clearAuthToken();
+  return false;
 };
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(tokenIsValid);
+  const dispatch = useDispatch();
+  const [isAuthenticated, setIsAuthenticated] = useState(getInitialAuthState);
   const [accountInfo, setAccountInfo] = useState(null);
   const [accountLoading, setAccountLoading] = useState(false);
 
-  const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('expire');
+  const logout = useCallback(() => {
+    clearAuthToken();
+    clearLastSearch();
+    dispatch(clearSearch());
     setIsAuthenticated(false);
     setAccountInfo(null);
-  };
+    setAccountLoading(false);
+  }, [dispatch]);
 
-  const login = async (loginValue, password) => {
+  const login = useCallback(async (loginValue, password) => {
     const { data } = await loginRequest(loginValue, password);
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('expire', data.expire);
+
+    saveAuthToken(data.accessToken, data.expire);
     setIsAuthenticated(true);
+
     return data;
-  };
+  }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    setUnauthorizedHandler(logout);
 
-    const expire = localStorage.getItem('expire');
-    const expiresAt = expire ? new Date(expire).getTime() : 0;
-    const timeLeft = expiresAt - Date.now();
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, [logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const timeLeft = getTokenExpiration() - Date.now();
 
     if (timeLeft <= 0) {
       logout();
-      return;
+      return undefined;
     }
 
     const timeoutId = window.setTimeout(logout, timeLeft);
 
     return () => window.clearTimeout(timeoutId);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, logout]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    if (!tokenIsValid()) {
-      logout();
-      return;
-    }
+    if (!isAuthenticated) return undefined;
 
     let active = true;
     setAccountLoading(true);
+
     getAccountInfo()
       .then(({ data }) => {
-        if (active) setAccountInfo(data.eventFiltersInfo || null);
+        if (active) {
+          setAccountInfo(data.eventFiltersInfo || null);
+        }
       })
-      .catch((error) => {
-        if (error.response?.status === 401) logout();
+      .catch(() => {
+        // 401 обрабатывается централизованно response interceptor'ом.
       })
       .finally(() => {
-        if (active) setAccountLoading(false);
+        if (active) {
+          setAccountLoading(false);
+        }
       });
 
     return () => {
@@ -73,8 +102,14 @@ export const AuthProvider = ({ children }) => {
   }, [isAuthenticated]);
 
   const value = useMemo(
-    () => ({ isAuthenticated, accountInfo, accountLoading, login, logout }),
-    [isAuthenticated, accountInfo, accountLoading]
+    () => ({
+      isAuthenticated,
+      accountInfo,
+      accountLoading,
+      login,
+      logout,
+    }),
+    [isAuthenticated, accountInfo, accountLoading, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

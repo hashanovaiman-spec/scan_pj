@@ -1,14 +1,19 @@
+import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Navigate } from 'react-router-dom';
 
 import { HistogramCarousel } from '../components/HistogramCarousel';
 import { DocumentCard } from '../components/DocumentCard';
-import { loadMoreDocuments } from '../store/searchSlice';
+import {
+  loadMoreDocuments,
+  runSearch,
+} from '../store/searchSlice';
 
 import resultsImage from '../assets/results.svg';
 
 export const ResultsPage = () => {
   const dispatch = useDispatch();
+  const restoreStarted = useRef(false);
 
   const {
     histograms,
@@ -19,12 +24,25 @@ export const ResultsPage = () => {
     docsStatus,
     error,
     histogramError,
+    lastPayload,
   } = useSelector((state) => state.search);
 
-  if (status === 'idle') {
+  useEffect(() => {
+    if (
+      status === 'idle' &&
+      lastPayload &&
+      !restoreStarted.current
+    ) {
+      restoreStarted.current = true;
+      dispatch(runSearch(lastPayload));
+    }
+  }, [dispatch, lastPayload, status]);
+
+  if (status === 'idle' && !lastPayload) {
     return <Navigate to="/search" replace />;
   }
 
+  const restoring = status === 'idle' && Boolean(lastPayload);
   const hasMore = documents.length < ids.length;
 
   return (
@@ -52,7 +70,7 @@ export const ResultsPage = () => {
         />
       </section>
 
-      {histogramStatus === 'loading' && (
+      {(histogramStatus === 'loading' || restoring) && (
         <section className="summary-section">
           <h2>Общая сводка</h2>
           <p className="muted">Загружаем данные</p>
@@ -72,17 +90,16 @@ export const ResultsPage = () => {
         </section>
       )}
 
-      {histogramStatus === 'failed' && (
+      {histogramStatus === 'failed' && !restoring && (
         <section className="summary-section">
           <h2>Общая сводка</h2>
-
           <p className="form-error results-error">
             {histogramError || 'Не удалось получить сводку'}
           </p>
         </section>
       )}
 
-      {histogramStatus === 'succeeded' && (
+      {histogramStatus === 'succeeded' && !restoring && (
         <HistogramCarousel histograms={histograms} />
       )}
 
@@ -106,7 +123,7 @@ export const ResultsPage = () => {
               ))}
             </div>
 
-            {docsStatus === 'loading' && (
+            {(docsStatus === 'loading' || restoring) && (
               <div className="large-loader">
                 <span className="spinner" />
                 <span>Загружаем документы…</span>
